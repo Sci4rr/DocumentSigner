@@ -6,13 +6,11 @@ import (
     "log"
     "net/http"
     "os"
-    "strings"
     "time"
 
-    "github.com/dgrijalva/jwt-go"
-    "github.com/golang-jwt/jwt/v4"
     "github.com/gorilla/mux"
     "golang.org/x/crypto/bcrypt"
+    "github.com/golang-jwt/jwt/v4"
 )
 
 var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
@@ -46,6 +44,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusBadRequest)
         return
     }
+    r.Body.Close() 
 
     hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
     if err != nil {
@@ -65,6 +64,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusBadRequest)
         return
     }
+    r.Body.Close() 
 
     expectedPassword, ok := users[creds.Username]
 
@@ -97,7 +97,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func welcomeHandler(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte(fmt.Sprintf("Welcome!")))
+    w.Write([]byte("Welcome!"))
 }
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -115,7 +115,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
         tokenStr := cookie.Value
         claims := &Claims{}
 
-        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+        _, err = jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
             return jwtKey, nil
         })
 
@@ -125,11 +125,6 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
                 return
             }
             w.WriteHeader(http.StatusBadRequest)
-            return
-        }
-
-        if !token.Valid {
-            w.WriteHeader(http.StatusUnauthorized)
             return
         }
 
