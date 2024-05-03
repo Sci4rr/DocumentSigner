@@ -1,37 +1,23 @@
-import React from 'react';
-import { Provider } from 'react-redux';
-import store from './store';
-import DocumentUploader from './components/DocumentUploader';
-import DocumentViewer from './components/DocumentViewer';
-import SignaturePad from './components/SignaturePad';
-import UserDashboard from './components/UserDashboard';
-import './App.css';
-
-class App extends React.Component {
-  constructor(props) {
-    super(props);
-  }
-
-  componentDidMount() {
-  }
-
-  render() {
-    return (
-      <Provider store={store}>
-        <div className="App">
-          <header className="App-header">
-            <h1>DocuSigner</h1>
-          </header>
-          <main>
-            <UserDashboard />
-            <DocumentUploader />
-            <DocumentViewer />
-            <SignaturePad />
-          </main>
-        </div>
-      </Provider>
-    );
-  }
+function memoize(fn) {
+  const cache = {};
+  return function(...args) {
+    const key = JSON.stringify(args);
+    if (!cache[key]) {
+      cache[key] = fn.apply(this, args);
+    }
+    return cache[key];
+  };
 }
 
-export default App;
+import React from 'react';
+
+const DocumentViewer = React.memo(function DocumentViewer(props) {
+  // Component code here
+});
+
+import React, { useMemo } from 'react';
+
+const MyComponent = (props) => {
+  const memoizedValue = useMemo(() => computeExpensiveValue(props.dependency), [props.dependency]);
+  return <div>{memoizedValue}</div>;
+};
