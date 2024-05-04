@@ -25,6 +25,10 @@ type Claims struct {
     jwt.StandardClaims
 }
 
+type UpdatePasswordRequest struct {
+    NewPassword string `json:"newPassword"`
+}
+
 var users = map[string]string{}
 
 func main() {
@@ -33,6 +37,7 @@ func main() {
     router.HandleFunc("/register", registerHandler).Methods("POST")
     router.HandleFunc("/login", loginHandler).Methods("POST")
     router.HandleFunc("/welcome", authMiddleware(welcomeHandler)).Methods("GET")
+    router.HandleFunc("/updatePassword", authMiddleware(updatePasswordHandler)).Methods("POST") // New endpoint
 
     log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -44,7 +49,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusBadRequest)
         return
     }
-    r.Body.Close() 
+    r.Body.Close()
 
     hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
     if err != nil {
@@ -64,7 +69,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusBadRequest)
         return
     }
-    r.Body.Close() 
+    r.Body.Close()
 
     expectedPassword, ok := users[creds.Username]
 
@@ -100,6 +105,30 @@ func welcomeHandler(w http.ResponseWriter, r *http.Request) {
     w.Write([]byte("Welcome!"))
 }
 
+func updatePasswordHandler(w http.ResponseWriter, r *http.Request) {
+    var updatePasswordReq UpdatePasswordRequest
+    var claims = r.Context().Value("claims").(*Claims) // Extracting claims from context (modified in authMiddleware)
+
+    err := json.NewDecoder(r.Body).Decode(&updatePasswordReq)
+    if err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        return
+    }
+
+    // Generate new hashed password
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(updatePasswordReq.NewPassword), 8)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
+
+    // Update stored password
+    users[claims.Username] = string(hashedPassword)
+
+    w.WriteHeader(http.StatusOK)
+    fmt.Fprintf(w, "Password updated successfully for user %s", claims.Username)
+}
+
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         cookie, err := r.Cookie("token")
@@ -115,7 +144,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
         tokenStr := cookie.Value
         claims := &Claims{}
 
-        _, err = jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+        tkn, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
             return jwtKey, nil
         })
 
@@ -127,6 +156,14 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
             w.WriteHeader(http.StatusBadRequest)
             return
         }
+
+        if !tkn.Valid {
+            w.WriteHeader(http.StatusUnauthorized)
+            return
+        }
+
+        // Save the claims in context for extracting in the handler
+        r = r.WithContext(context.WithValue(r.Context(), "claims", claims))
 
         next.ServeHTTP(w, r)
     })
