@@ -1,6 +1,7 @@
 package main
 
 import (
+    "context"
     "encoding/json"
     "fmt"
     "log"
@@ -37,7 +38,7 @@ func main() {
     router.HandleFunc("/register", registerHandler).Methods("POST")
     router.HandleFunc("/login", loginHandler).Methods("POST")
     router.HandleFunc("/welcome", authMiddleware(welcomeHandler)).Methods("GET")
-    router.HandleFunc("/updatePassword", authMiddleware(updatePasswordHandler)).Methods("POST") // New endpoint
+    router.HandleFunc("/updatePassword", authMiddleware(updatePasswordHandler)).Methods("POST")
 
     log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -46,14 +47,14 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
     var creds Credentials
     err := json.NewDecoder(r.Body).Decode(&creds)
     if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
+        http.Error(w, "Bad request", http.StatusBadRequest)
         return
     }
-    r.Body.Close()
+    defer r.Body.Close()
 
-    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), bcrypt.DefaultCost)
     if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
+        http.Error(w, "Internal server error", http.StatusInternalServerError)
         return
     }
 
@@ -66,15 +67,15 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     var creds Credentials
     err := json.NewDecoder(r.Body).Decode(&creds)
     if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
+        http.Error(w, "Bad request", http.StatusBadRequest)
         return
     }
-    r.Body.Close()
+    defer r.Body.Close()
 
     expectedPassword, ok := users[creds.Username]
 
     if !ok || bcrypt.CompareHashAndPassword([]byte(expectedPassword), []byte(creds.Password)) != nil {
-        w.WriteHeader(http.StatusUnauthorized)
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
         return
     }
 
@@ -90,7 +91,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     tokenString, err := token.SignedString(jwtKey)
 
     if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
+        http.Error(w, "Internal server error", http.StatusInternalServerError)
         return
     }
 
@@ -102,42 +103,48 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func welcomeHandler(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte("Welcome!"))
+    _, err := w.Write([]byte("Welcome!"))
+    if err != nil {
+        log.Printf("Failed to write response: %v", err)
+    }
 }
 
 func updatePasswordHandler(w http.ResponseWriter, r *http.Request) {
     var updatePasswordReq UpdatePasswordRequest
-    var claims = r.Context().Value("claims").(*Claims) // Extracting claims from context (modified in authMiddleware)
+    var claims = r.Context().Value("claims").(*Claims)
 
     err := json.NewDecoder(r.Body).Decode(&updatePasswordReq)
     if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
+        http.Error(w, "Bad request", http.StatusBadRequest)
         return
     }
+    defer r.Body.Close()
 
-    // Generate new hashed password
-    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(updatePasswordReq.NewPassword), 8)
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(updatePasswordReq.NewPassword), bcrypt.DefaultCost)
     if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
+        http.Error(w, "Internal server error", http.StatusInternalServerError)
         return
     }
 
-    // Update stored password
     users[claims.Username] = string(hashedPassword)
 
     w.WriteHeader(http.StatusOK)
-    fmt.Fprintf(w, "Password updated successfully for user %s", claims.Username)
+    message := fmt.Sprintf("Password updated successfully for user %s", claims.Username)
+    _, err = w.Write([]byte(message))
+    if err != nil {
+        log.Printf("Failed to write response: %v", err)
+    }
 }
 
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    return func(w http.ResponseWriter, r *http.Request) {
         cookie, err := r.Cookie("token")
         if err != nil {
             if err == http.ErrNoCookie {
-                w.WriteHeader(http.StatusUnauthorized)
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
                 return
             }
-            w.WriteHeader(http.StatusBadRequest)
+            http.Error(w, "Bad request", http.StatusBadRequest)
             return
         }
 
@@ -145,26 +152,27 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
         claims := &Claims{}
 
         tkn, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+                return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+            }
             return jwtKey, nil
         })
 
         if err != nil {
             if err == jwt.ErrSignatureInvalid {
-                w.WriteHeader(http.StatusUnauthorized)
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
                 return
             }
-            w.WriteHeader(http.StatusBadRequest)
+            http.Error(w, "Bad request", http.StatusBadRequest)
             return
         }
 
         if !tkn.Valid {
-            w.WriteHeader(http.StatusUnauthorized)
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
             return
         }
 
-        // Save the claims in context for extracting in the handler
-        r = r.WithContext(context.WithValue(r.Context(), "claims", claims))
-
-        next.ServeHTTP(w, r)
-    })
+        ctx := context.WithValue(r.Context(), "claims", claims)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    }
 }
