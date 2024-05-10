@@ -6,8 +6,12 @@ let documentContent = "";
 
 const broadcastDocument = (clients, content) => {
   clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'document', content }));
+    try {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'document', content }));
+      }
+    } catch (error) {
+      console.error('Error broadcasting document to a client:', error);
     }
   });
 };
@@ -17,14 +21,24 @@ console.log(`WebSocket server started on port: ${PORT}`);
 
 wss.on('connection', (ws) => {
   console.log('Client connected');
-  ws.send(JSON.stringify({ type: 'document', content: documentContent }));
+
+  try {
+    ws.send(JSON.stringify({ type: 'document', content: documentContent }));
+  } catch (error) {
+    console.error('Error sending document on connection:', error);
+  }
 
   ws.on('message', (message) => {
     console.log('Received: %s', message);
-    const data = JSON.parse(message);
-    if (data.type === 'update') {
-      documentContent = data.content;
-      broadcastDocument(wss.clients, documentContent);
+    try {
+      const data = JSON.parse(message);
+  
+      if (data.type === 'update') {
+        documentContent = data.content;
+        broadcastDocument(wss.clients, documentContent);
+      }
+    } catch (error) {
+      console.error('Error processing received message:', error);
     }
   });
 
