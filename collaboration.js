@@ -1,20 +1,38 @@
 require('dotenv').config();
 const WebSocket = require('ws');
-const PORT = process.env.PORT || 8080;
 
+const PORT = process.env.PORT || 8080;
 let documentContent = "";
 
-const broadcastDocument = (clients, content) => {
+function broadcastDocument(clients, content) {
   clients.forEach(client => {
-    try {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: 'document', content }));
-      }
-    } catch (error) {
-      console.error('Error broadcasting document to a client:', error);
+    if (client.readyState === WebSocket.OPEN) {
+      sendDocumentToClient(client, content);
     }
   });
-};
+}
+
+function sendDocumentToClient(client, content) {
+  try {
+    client.send(JSON.stringify({ type: 'document', content }));
+  } catch (error) {
+    console.error('Error sending document to a client:', error);
+  }
+}
+
+function handleIncomingMessage(ws, message) {
+  console.log('Received:', message);
+  try {
+    const data = JSON.parse(message);
+
+    if (data.type === 'update') {
+      documentContent = data.content;
+      broadcastDocument(wss.clients, documentContent);
+    }
+  } catch (error) {
+    console.error('Error processing received message:', error);
+  }
+}
 
 const wss = new WebSocket.Server({ port: PORT });
 console.log(`WebSocket server started on port: ${PORT}`);
@@ -22,25 +40,9 @@ console.log(`WebSocket server started on port: ${PORT}`);
 wss.on('connection', (ws) => {
   console.log('Client connected');
 
-  try {
-    ws.send(JSON.stringify({ type: 'document', content: documentContent }));
-  } catch (error) {
-    console.error('Error sending document on connection:', error);
-  }
+  sendDocumentToClient(ws, documentContent); 
 
-  ws.on('message', (message) => {
-    console.log('Received: %s', message);
-    try {
-      const data = JSON.parse(message);
-  
-      if (data.type === 'update') {
-        documentContent = data.content;
-        broadcastDocument(wss.clients, documentContent);
-      }
-    } catch (error) {
-      console.error('Error processing received message:', error);
-    }
-  });
+  ws.on('message', (message) => handleIncomingMessage(ws, message));
 
   ws.on('close', () => {
     console.log('Client disconnected');
