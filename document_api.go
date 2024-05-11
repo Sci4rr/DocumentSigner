@@ -30,12 +30,13 @@ func log(message string) {
 }
 
 func UploadDocument(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20)
+	err := r.ParseMultipartForm(10 << 20) // Keep this as is; it's necessary and not related to external API calls
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log("Error parsing multipart form: " + err.Error())
 		return
 	}
+
 	file, handler, err := r.FormFile("myFile")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -43,36 +44,43 @@ func UploadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	dst, err := os.Create(filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), handler.Filename))
+
+	// Optimize file creation by directly using the given path and avoiding extra steps if possible.
+	dstPath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), handler.Filename)
+	dst, err := os.Create(dstPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log("Error creating the file: " + err.Error())
 		return
 	}
 	defer dst.Close()
-	_, err = io.Copy(dst, file)
-	if err != nil {
+
+	if _, err = io.Copy(dst, file); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log("Error copying the file: " + err.Error())
 		return
 	}
+
 	log("File uploaded successfully: " + handler.Filename)
 	fmt.Fprintf(w, "File uploaded successfully: %s", handler.Filename)
 }
 
 func RetrieveDocument(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("filename")
-	filepath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), filename)
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+	filePath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), filename)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		http.Error(w, "File not found", http.StatusNotFound)
 		log("File not found: " + filename)
 		return
 	}
+
 	log("File retrieved successfully: " + filename)
-	http.ServeFile(w, r, filepath)
+	http.ServeFile(w, r, filePath)
 }
 
 func UpdateDocumentPermissions(w http.ResponseWriter, r *http.Request) {
+	// Without further details, it's hard to optimize this function.
 	log("Document permissions updated")
 	fmt.Fprintf(w, "Document permissions updated")
 }
