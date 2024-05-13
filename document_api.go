@@ -13,7 +13,7 @@ import (
 
 func init() {
 	if err := godotenv.Load(); err != nil {
-		log("No .env file found")
+		logMessage("No .env file found")
 	}
 }
 
@@ -25,74 +25,73 @@ type Document struct {
 	FilePath   string
 }
 
-func log(message string) {
+func logMessage(message string) {
 	fmt.Printf("%s: %s\n", time.Now().Format("2006-01-02 15:04:05"), message)
 }
 
-func UploadDocument(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20) // Keep this as is; it's necessary and not related to external API calls
+func handleUpload(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseMultipartForm(10 << 20) // 10 MB limit
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log("Error parsing multipart form: " + err.Error())
+		logMessage("Error parsing multipart form: " + err.Error())
 		return
 	}
 
-	file, handler, err := r.FormFile("myFile")
+	uploadFile, fileHeader, err := r.FormFile("myFile")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		log("Error retrieving the file: " + err.Error())
+		logMessage("Error retrieving the file: " + err.Error())
 		return
 	}
-	defer file.Close()
+	defer uploadFile.Close()
 
-	// Optimize file creation by directly using the given path and avoiding extra steps if possible.
-	dstPath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), handler.Filename)
-	dst, err := os.Create(dstPath)
+	destFilePath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), fileHeader.Filename)
+	destFile, err := os.Create(destFilePath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log("Error creating the file: " + err.Error())
+		logMessage("Error creating the file: " + err.Error())
 		return
 	}
-	defer dst.Close()
+	defer destFile.Close()
 
-	if _, err = io.Copy(dst, file); err != nil {
+	if _, err = io.Copy(destFile, uploadFile); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log("Error copying the file: " + err.Error())
+		logMessage("Error copying the file: " + err.Error())
 		return
 	}
 
-	log("File uploaded successfully: " + handler.Filename)
-	fmt.Fprintf(w, "File uploaded successfully: %s", handler.Filename)
+	logMessage("File uploaded successfully: " + fileHeader.Filename)
+	fmt.Fprintf(w, "File uploaded successfully: %s", fileHeader.Filename)
 }
 
-func RetrieveDocument(w http.ResponseWriter, r *http.Request) {
-	filename := r.URL.Query().Get("filename")
-	filePath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), filename)
+func handleRetrieve(w http.ResponseWriter, r *http.Request) {
+	requestedFileName := r.URL.Query().Get("filename")
+	requestedFilePath := filepath.Join(os.Getenv("DOCUMENT_STORAGE_PATH"), requestedFileName)
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	if _, err := os.Stat(requestedFilePath); os.IsNotExist(err) {
 		http.Error(w, "File not found", http.StatusNotFound)
-		log("File not found: " + filename)
+		logMessage("File not found: " + requestedFileName)
 		return
 	}
 
-	log("File retrieved successfully: " + filename)
-	http.ServeFile(w, r, filePath)
+	logMessage("File retrieved successfully: " + requestedFileName)
+	http.ServeFile(w, r, requestedFilePath)
 }
 
-func UpdateDocumentPermissions(w http.ResponseWriter, r *http.Request) {
-	// Without further details, it's hard to optimize this function.
-	log("Document permissions updated")
+func handleUpdatePermissions(w http.ResponseWriter, r *http.Request) {
+	// Without specific details on permission updating, this is a placeholder function
+	logMessage("Document permissions updated")
 	fmt.Fprintf(w, "Document permissions updated")
 }
 
-func setupRoutes() {
-	http.HandleFunc("/upload", UploadDocument)
-	http.HandleFunc("/retrieve", RetrieveDocument)
-	http.HandleFunc("/permissions", UpdateDocumentPermissions)
+func setupServerRoutes() {
+	http.HandleFunc("/upload", handleUpload)
+	http.HandleFunc("/retrieve", handleRetrieve)
+	http.HandleFunc("/permissions", handleUpdatePermissions)
 }
 
 func main() {
-	setupRoutes()
-	log("Server started at http://localhost:8080")
+	setupServerRoutes()
+	logMessage("Server started at http://localhost:8080")
 	http.ListenAndServe(":8080", nil)
 }
