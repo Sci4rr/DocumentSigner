@@ -4,6 +4,8 @@ const WebSocket = require('ws');
 const PORT = process.env.PORT || 8080;
 let documentContent = "";
 
+let documentUpdatesLog = [];
+
 function broadcastDocument(clients, content) {
   clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -27,6 +29,7 @@ function handleIncomingMessage(ws, message) {
 
     if (data.type === 'update') {
       documentContent = data.content;
+      updateDocumentLog(data.content);
       broadcastDocument(wss.clients, documentContent);
     }
   } catch (error) {
@@ -34,12 +37,21 @@ function handleIncomingMessage(ws, message) {
   }
 }
 
+function updateDocumentLog(content) {
+  const updateTimestamp = new Date().toISOString();
+  documentUpdatesLog.push({ updateTimestamp, content });
+  console.log(`Document updated at ${updateTimestamp}:`, content);
+}
+
+function getDocumentUpdateLogs() {
+  return documentUpdatesLog;
+}
+
 const wss = new WebSocket.Server({ port: PORT });
 console.log(`WebSocket server started on port: ${PORT}`);
 
 wss.on('connection', (ws) => {
   console.log('Client connected');
-
   sendDocumentToClient(ws, documentContent); 
 
   ws.on('message', (message) => handleIncomingMessage(ws, message));
