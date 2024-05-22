@@ -1,1 +1,40 @@
-The `server.go` project is a robust and secure server solution developed using Go and the Gin web framework, designed to efficiently manage API requests for a user-centric document management system. This project emphasizes strong security practices, including the implementation of HTTPS, to ensure the utmost protection of sensitive documents during upload, download, and sharing operations. Furthermore, it incorporates advanced user authentication and session management mechanisms to safeguard user data and enhance the overall security posture. This server is tailored to provide a seamless and secure experience for users managing their documents.
+# DocumentSigner
+
+## Overview
+
+DocumentSigner is a robust and secure server solution developed in Go using the Gin web framework. It efficiently manages API requests for a user-centric document management system, emphasizing strong security practices, including HTTPS, to protect sensitive documents during upload, download, and sharing.
+
+## Features
+
+- **Secure Document Handling**: Upload, download, and share documents securely.
+- **HTTPS**: Ensures all communications are encrypted.
+- **Advanced Authentication**: Robust user authentication and session management.
+- **User-Centric**: Designed for seamless document management.
+
+## Getting Started
+
+### Prerequisites
+
+- Go 1.16+
+- Gin web framework
+
+### Installation
+
+1. Clone the repository:
+
+   ```sh
+   git clone https://github.com/Sci4rr/DocumentSigner.git
+   cd DocumentSigner
+   ```
+
+2. Install dependencies:
+
+   ```sh
+   go mod tidy
+   ```
+
+3. Run the server:
+
+   ```sh
+   go run server.go
+   ```
